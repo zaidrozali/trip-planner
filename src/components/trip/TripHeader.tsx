@@ -1,22 +1,62 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button"
-import { Calendar, Download, MapPin, Share2, Users } from "lucide-react"
-import { Trip, User } from "@prisma/client"
+import { Calendar, Download, MapPin, Share2, Users, Wallet, Trash2 } from "lucide-react"
+import { Trip, User, Day, Activity } from "@prisma/client"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { deleteTrip } from "@/actions/trips";
+
+type ActivityWithCost = Activity & { cost: number };
 
 interface TripHeaderProps {
-    trip: Trip & { owner: User }
+    trip: Trip & {
+        owner: User;
+        days: (Day & { activities: ActivityWithCost[] })[];
+    }
 }
 
 export default function TripHeader({ trip }: TripHeaderProps) {
+    const router = useRouter();
+    const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const startDate = new Date(trip.startDate);
     const endDate = new Date(trip.endDate);
-    const dayCount = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const dayCount = trip.days.length;
 
-    // Calculate total spent (would need activities data in real implementation)
-    const spent = 500; // Placeholder
-    const budgetPercent = trip.budget > 0 ? Math.min((spent / trip.budget) * 100, 100) : 0;
+    // Calculate total spent from all activities
+    const totalSpent = trip.days.reduce((sum, day) => {
+        return sum + day.activities.reduce((daySum, activity) => daySum + activity.cost, 0);
+    }, 0);
+
+    const budgetPercent = trip.budget > 0 ? Math.min((totalSpent / trip.budget) * 100, 100) : 0;
+    const remaining = trip.budget - totalSpent;
+    const isOverBudget = remaining < 0;
 
     const formatDate = (date: Date) => {
         return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    };
+
+    const handleDeleteTrip = async () => {
+        setIsDeleting(true);
+        try {
+            const result = await deleteTrip(trip.id);
+            if (result.success) {
+                router.push("/");
+                router.refresh();
+            } else {
+                console.error("Failed to delete trip:", result.error);
+                alert("Failed to delete trip. Please try again.");
+            }
+        } catch (error) {
+            console.error("Error deleting trip:", error);
+            alert("An error occurred while deleting the trip.");
+        } finally {
+            setIsDeleting(false);
+            setShowDeleteDialog(false);
+        }
     };
 
     return (
@@ -55,6 +95,15 @@ export default function TripHeader({ trip }: TripHeaderProps) {
                     <Button variant="ghost" size="icon" className="rounded-full dark:text-gray-300 dark:hover:bg-gray-800">
                         <Download className="w-4 h-4" />
                     </Button>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="rounded-full text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => setShowDeleteDialog(true)}
+                        title="Delete Trip"
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </Button>
                 </div>
             </div>
 
@@ -71,19 +120,47 @@ export default function TripHeader({ trip }: TripHeaderProps) {
 
                 <div className="w-full md:w-1/3 space-y-2">
                     <div className="flex justify-between text-xs font-medium">
-                        <span className="text-gray-500 dark:text-gray-400">Budget Progress</span>
-                        <span className="text-gray-900 dark:text-gray-200">
-                            RM {spent.toFixed(2)} / RM {trip.budget.toFixed(2)}
+                        <span className="text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                            <Wallet className="w-3 h-3" /> Budget
+                        </span>
+                        <span className={isOverBudget ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-gray-200"}>
+                            RM {totalSpent.toFixed(2)} / RM {trip.budget.toFixed(2)}
+                            {isOverBudget && (
+                                <span className="ml-1 text-red-500">(Over by RM {Math.abs(remaining).toFixed(2)})</span>
+                            )}
                         </span>
                     </div>
                     <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                         <div
-                            className="h-full bg-teal-500 rounded-full transition-all duration-500"
-                            style={{ width: `${budgetPercent}%` }}
+                            className={`h-full rounded-full transition-all duration-500 ${isOverBudget
+                                    ? "bg-red-500"
+                                    : budgetPercent > 80
+                                        ? "bg-amber-500"
+                                        : "bg-teal-500"
+                                }`}
+                            style={{ width: `${Math.min(budgetPercent, 100)}%` }}
                         />
                     </div>
+                    {!isOverBudget && remaining > 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 text-right">
+                            RM {remaining.toFixed(2)} remaining
+                        </p>
+                    )}
                 </div>
             </div>
+
+            {/* Delete Confirmation Dialog */}
+            <ConfirmDialog
+                isOpen={showDeleteDialog}
+                onClose={() => setShowDeleteDialog(false)}
+                onConfirm={handleDeleteTrip}
+                title="Delete Trip?"
+                message={`Are you sure you want to delete "${trip.title}"? This will permanently delete all days, activities, and checklists. This action cannot be undone.`}
+                confirmText="Delete Trip"
+                cancelText="Cancel"
+                isLoading={isDeleting}
+                variant="danger"
+            />
         </div>
     )
 }

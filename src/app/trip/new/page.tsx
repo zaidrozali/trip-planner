@@ -6,6 +6,7 @@ import { createTrip } from "@/actions/trips";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Calendar, MapPin, Wallet, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { PlacesAutocomplete } from "@/components/map/PlacesAutocomplete";
 
 export default function NewTripPage() {
     const router = useRouter();
@@ -19,6 +20,8 @@ export default function NewTripPage() {
 
     const [startDate, setStartDate] = useState(formatDateInput(today));
     const [endDate, setEndDate] = useState(formatDateInput(nextWeek));
+    const [location, setLocation] = useState("");
+    const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
 
     // When start date changes, ensure end date is not earlier
     const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,12 +97,26 @@ export default function NewTripPage() {
                                 <MapPin className="w-4 h-4 inline mr-1" />
                                 Location
                             </label>
-                            <input
-                                type="text"
-                                name="location"
+                            <PlacesAutocomplete
+                                value={location}
+                                onChange={setLocation}
+                                onPlaceSelected={(place) => {
+                                    setLocation(place.address);
+                                    setCoordinates({
+                                        latitude: place.latitude,
+                                        longitude: place.longitude,
+                                    });
+                                }}
                                 placeholder="e.g., Cameron Highlands, Malaysia"
                                 className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none transition-all text-gray-900 dark:text-white placeholder:text-gray-400"
                             />
+                            <input type="hidden" name="location" value={location} />
+                            {coordinates && (
+                                <>
+                                    <input type="hidden" name="latitude" value={coordinates.latitude} />
+                                    <input type="hidden" name="longitude" value={coordinates.longitude} />
+                                </>
+                            )}
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">

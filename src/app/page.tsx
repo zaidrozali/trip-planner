@@ -1,24 +1,36 @@
 import { redirect } from "next/navigation";
 import { getUser } from "@/actions/auth";
-import { getTrips } from "@/actions/trips";
-import TripHeader from "@/components/trip/TripHeader";
-import TripSidebar from "@/components/trip/TripSidebar";
-import ActivityFeed from "@/components/trip/ActivityFeed";
-import MapWidget from "@/components/trip/MapWidget";
+import { getTrips, getTrip } from "@/actions/trips";
+import { TripDashboard } from "@/components/trip/TripDashboard";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { UserMenu } from "@/components/auth/UserMenu";
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, ChevronLeft, LayoutGrid } from "lucide-react";
 
-export default async function Home() {
+interface HomeProps {
+  searchParams: Promise<{ trip?: string }>;
+}
+
+export default async function Home({ searchParams }: HomeProps) {
   const user = await getUser();
 
   if (!user) {
     redirect("/auth/login");
   }
 
-  const trips = await getTrips();
-  const currentTrip = trips[0]; // Show first trip or create new
+  const params = await searchParams;
+  const tripId = params.trip;
+
+  // If trip ID is provided, show that trip; otherwise show first trip
+  let currentTrip;
+  if (tripId) {
+    currentTrip = await getTrip(tripId);
+  }
+
+  if (!currentTrip) {
+    const trips = await getTrips();
+    currentTrip = trips[0];
+  }
 
   return (
     <main className="min-h-screen bg-[#f0fdfa] dark:bg-[#042f2e] p-4 md:p-6 lg:p-8 pb-20 font-sans selection:bg-teal-100 selection:text-teal-900 transition-colors duration-300">
@@ -28,22 +40,24 @@ export default async function Home() {
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-b from-teal-50/50 to-transparent dark:from-teal-900/20 rounded-bl-full -z-0 pointer-events-none opacity-60"></div>
 
         <div className="relative z-10 p-6 md:p-8 lg:p-10 space-y-8">
-          {/* Top bar with theme toggle and user menu */}
-          <div className="absolute top-6 right-6 z-50 flex items-center gap-3">
-            <ThemeToggle />
-            <UserMenu user={user} />
+          {/* Top bar */}
+          <div className="flex items-center justify-between">
+            <Link
+              href="/trips"
+              className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              <span className="text-sm font-medium">All Trips</span>
+            </Link>
+
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <UserMenu user={user} />
+            </div>
           </div>
 
           {currentTrip ? (
-            <>
-              <TripHeader trip={currentTrip} />
-
-              <div className="flex flex-col lg:flex-row gap-8 items-start">
-                <TripSidebar trip={currentTrip} />
-                <ActivityFeed trip={currentTrip} selectedDay={1} />
-                <MapWidget />
-              </div>
-            </>
+            <TripDashboard trip={currentTrip} />
           ) : (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="w-24 h-24 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-3xl flex items-center justify-center text-5xl mb-6 shadow-lg shadow-teal-200 dark:shadow-teal-900/20">

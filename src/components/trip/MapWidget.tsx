@@ -1,50 +1,271 @@
-import { Button } from "@/components/ui/button";
-import { Maximize2, Map as MapIcon } from "lucide-react";
+"use client";
 
-export default function MapWidget() {
+import { GoogleMap, Marker, InfoWindow, Polyline, DirectionsRenderer } from "@react-google-maps/api";
+import { useState, useEffect, useMemo } from "react";
+import { MapPlaceholder } from "@/components/map/MapPlaceholder";
+import { getColorHex, getDefaultMapCenter } from "@/lib/map-utils";
+import { Clock, DollarSign, MapPin } from "lucide-react";
+
+const containerStyle = {
+  width: "100%",
+  height: "100%",
+};
+
+interface Activity {
+  id: string;
+  title: string;
+  location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  color: string;
+  icon: string;
+  time: string;
+  cost: number;
+  duration: number;
+  transportType?: string | null;
+}
+
+interface MapWidgetProps {
+  activities: Activity[];
+  tripLocation?: {
+    latitude: number;
+    longitude: number;
+  } | null;
+}
+
+export default function MapWidget({ activities, tripLocation }: MapWidgetProps) {
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
+  const [directions, setDirections] = useState<Map<string, google.maps.DirectionsResult>>(new Map());
+
+  // Filter activities with valid coordinates
+  const activitiesWithCoords = useMemo(
+    () =>
+      activities.filter(
+        (a) => a.latitude !== null && a.longitude !== null
+      ),
+    [activities]
+  );
+
+  // Calculate map center
+  const center = useMemo(() => {
+    if (activitiesWithCoords.length > 0) {
+      return {
+        lat: activitiesWithCoords[0].latitude!,
+        lng: activitiesWithCoords[0].longitude!,
+      };
+    }
+    if (tripLocation) {
+      return { lat: tripLocation.latitude, lng: tripLocation.longitude };
+    }
+    return getDefaultMapCenter("Cameron Highlands");
+  }, [activitiesWithCoords, tripLocation]);
+
+  // Fetch directions for routes between activities
+  useEffect(() => {
+    if (!map || activitiesWithCoords.length < 2) return;
+
+    const directionsService = new google.maps.DirectionsService();
+    const newDirections = new Map<string, google.maps.DirectionsResult>();
+
+    const fetchDirections = async () => {
+      for (let i = 0; i < activitiesWithCoords.length - 1; i++) {
+        const activity = activitiesWithCoords[i];
+        const nextActivity = activitiesWithCoords[i + 1];
+
+        // Skip if no transport type set
+        if (!activity.transportType) continue;
+
+        const origin = { lat: activity.latitude!, lng: activity.longitude! };
+        const destination = { lat: nextActivity.latitude!, lng: nextActivity.longitude! };
+
+        // Map transport type to travel mode
+        const travelModeMap: Record<string, google.maps.TravelMode> = {
+          walking: google.maps.TravelMode.WALKING,
+          driving: google.maps.TravelMode.DRIVING,
+          grab: google.maps.TravelMode.DRIVING,
+          taxi: google.maps.TravelMode.DRIVING,
+          bus: google.maps.TravelMode.TRANSIT,
+          train: google.maps.TravelMode.TRANSIT,
+          flight: google.maps.TravelMode.DRIVING, // Fallback for flight
+        };
+
+        const travelMode = travelModeMap[activity.transportType.toLowerCase()] || google.maps.TravelMode.DRIVING;
+
+        try {
+          const result = await directionsService.route({
+            origin,
+            destination,
+            travelMode,
+          });
+
+          if (result.routes.length > 0) {
+            newDirections.set(`${activity.id}-${nextActivity.id}`, result);
+          }
+        } catch (error) {
+          console.error("Error fetching directions:", error);
+        }
+      }
+
+      setDirections(newDirections);
+    };
+
+    fetchDirections();
+  }, [map, activitiesWithCoords]);
+
+  // Auto-fit bounds when activities change
+  useEffect(() => {
+    if (map && activitiesWithCoords.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      activitiesWithCoords.forEach((activity) => {
+        bounds.extend({
+          lat: activity.latitude!,
+          lng: activity.longitude!,
+        });
+      });
+      map.fitBounds(bounds, 50); // 50px padding
+    }
+  }, [map, activitiesWithCoords]);
+
+  // Show placeholder if no coordinates
+  if (activitiesWithCoords.length === 0) {
     return (
-        <div className="w-full lg:w-80 flex-shrink-0">
-            <div className="rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 relative h-[400px] lg:h-[600px] xl:h-[calc(100vh-300px)] min-h-[400px]">
-                {/* Map Placeholder Graphic */}
-                <div className="absolute inset-0 bg-[url('https://maps.googleapis.com/maps/api/staticmap?center=4.4721,101.3788&zoom=13&size=600x800&scale=2&maptype=terrain&key=YOUR_API_KEY_HERE')] bg-cover bg-center grayscale opacity-30 dark:opacity-20 hover:grayscale-0 hover:opacity-80 transition-all duration-700 dark:invert-[.1]"></div>
+      <MapPlaceholder message="Add locations to activities to see them on the map" />
+    );
+  }
 
-                {/* Fallback pattern if image fails to load or for style */}
-                <div className="absolute inset-0 bg-gray-200/50 dark:bg-gray-900/50 flex items-center justify-center z-0">
-                    <div className="text-center p-6">
-                        <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                            <MapIcon className="w-6 h-6 text-gray-400 dark:text-gray-500" />
-                        </div>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">Interactive Map View</p>
-                    </div>
-                </div>
+  const selectedActivityData = selectedActivity
+    ? activitiesWithCoords.find((a) => a.id === selectedActivity)
+    : null;
 
-                {/* Functional Overlay */}
-                <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
-                    <Button size="icon" variant="secondary" className="bg-white/90 dark:bg-gray-800/90 shadow-md w-8 h-8 rounded-lg text-gray-600 dark:text-gray-300 hover:text-teal-600 dark:hover:text-teal-400 backdrop-blur-sm">
-                        <Maximize2 className="w-4 h-4" />
-                    </Button>
-                </div>
+  return (
+    <div className="w-full lg:w-80 flex-shrink-0">
+      <div className="rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-800 h-[400px] lg:h-[600px]">
+        <GoogleMap
+          mapContainerStyle={containerStyle}
+          center={center}
+          zoom={13}
+          onLoad={setMap}
+          options={{
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: true,
+            styles: [
+              {
+                featureType: "poi",
+                elementType: "labels",
+                stylers: [{ visibility: "off" }],
+              },
+            ],
+          }}
+        >
+          {/* Draw route lines between consecutive activities */}
+          {activitiesWithCoords.map((activity, index) => {
+            if (index === activitiesWithCoords.length - 1) return null;
+            const nextActivity = activitiesWithCoords[index + 1];
+            const routeKey = `${activity.id}-${nextActivity.id}`;
+            const directionResult = directions.get(routeKey);
 
-                {/* Current Location Pin Mockup */}
-                <div className="absolute top-1/3 left-1/2 -translate-x-1/2 z-10">
-                    <div className="relative">
-                        <div className="w-4 h-4 bg-teal-600 rounded-full border-2 border-white dark:border-gray-900 shadow-lg animate-bounce"></div>
-                        <div className="w-12 h-12 bg-teal-500/20 rounded-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-ping"></div>
-                    </div>
-                </div>
+            // If we have directions, use DirectionsRenderer to show the route
+            if (directionResult) {
+              return (
+                <DirectionsRenderer
+                  key={routeKey}
+                  directions={directionResult}
+                  options={{
+                    suppressMarkers: true, // We'll use our own custom markers
+                    polylineOptions: {
+                      strokeColor: "#0d9488",
+                      strokeOpacity: 0.7,
+                      strokeWeight: 4,
+                    },
+                  }}
+                />
+              );
+            }
 
-                <div className="absolute bottom-4 left-4 right-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md p-3 rounded-xl shadow-lg border border-white/50 dark:border-gray-700/50 z-10">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
-                            <MapIcon className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <div className="text-xs font-bold text-gray-800 dark:text-gray-100">Campsite Loc.</div>
-                            <div className="text-[10px] text-gray-500 dark:text-gray-400">2km from Center</div>
-                        </div>
-                    </div>
+            // Fallback to straight line if no directions available
+            return (
+              <Polyline
+                key={routeKey}
+                path={[
+                  { lat: activity.latitude!, lng: activity.longitude! },
+                  { lat: nextActivity.latitude!, lng: nextActivity.longitude! },
+                ]}
+                options={{
+                  strokeColor: "#94a3b8",
+                  strokeOpacity: 0.4,
+                  strokeWeight: 2,
+                  geodesic: true,
+                  strokePattern: [10, 5], // Dashed line for fallback
+                }}
+              />
+            );
+          })}
+
+          {/* Render markers for activities */}
+          {activitiesWithCoords.map((activity, index) => (
+            <Marker
+              key={activity.id}
+              position={{
+                lat: activity.latitude!,
+                lng: activity.longitude!,
+              }}
+              onClick={() => setSelectedActivity(activity.id)}
+              label={{
+                text: `${index + 1}`,
+                color: "#ffffff",
+                fontSize: "12px",
+                fontWeight: "bold",
+              }}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 12,
+                fillColor: getColorHex(activity.color),
+                fillOpacity: 1,
+                strokeColor: "#ffffff",
+                strokeWeight: 3,
+              }}
+            />
+          ))}
+
+          {/* Info Window for selected activity */}
+          {selectedActivityData && (
+            <InfoWindow
+              position={{
+                lat: selectedActivityData.latitude!,
+                lng: selectedActivityData.longitude!,
+              }}
+              onCloseClick={() => setSelectedActivity(null)}
+            >
+              <div className="p-2 min-w-[200px]">
+                <h3 className="font-semibold text-sm text-gray-900 mb-2">
+                  {selectedActivityData.title}
+                </h3>
+                {selectedActivityData.location && (
+                  <div className="flex items-start gap-2 text-xs text-gray-600 mb-1">
+                    <MapPin className="w-3 h-3 mt-0.5 flex-shrink-0" />
+                    <span>{selectedActivityData.location}</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 text-xs text-gray-600 mb-1">
+                  <Clock className="w-3 h-3 flex-shrink-0" />
+                  <span>
+                    {selectedActivityData.time} ({selectedActivityData.duration} min)
+                  </span>
                 </div>
-            </div>
-        </div>
-    )
+                {selectedActivityData.cost > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-gray-600">
+                    <DollarSign className="w-3 h-3 flex-shrink-0" />
+                    <span>RM {selectedActivityData.cost.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+            </InfoWindow>
+          )}
+        </GoogleMap>
+      </div>
+    </div>
+  );
 }
