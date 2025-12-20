@@ -5,7 +5,6 @@ import TripHeader from "@/components/trip/TripHeader";
 import TripSidebar from "@/components/trip/TripSidebar";
 import ActivityFeed from "@/components/trip/ActivityFeed";
 import MapWidget from "@/components/trip/MapWidget";
-import TripSummary from "@/components/trip/TripSummary";
 import { TravelAssistant } from "@/components/trip/TravelAssistant";
 import { VisualTripSummary } from "@/components/trip/VisualTripSummary";
 import { Trip, User, Day, Activity, Checklist, ChecklistItem } from "@prisma/client";
@@ -51,7 +50,6 @@ export function TripDashboard({ trip }: TripDashboardProps) {
     return (
         <>
             <TripHeader trip={trip} />
-            <TripSummary trip={trip} />
 
             {/* Visual Trip Summary */}
             <VisualTripSummary trip={trip} />
