@@ -7,6 +7,7 @@ import ActivityFeed from "@/components/trip/ActivityFeed";
 import MapWidget from "@/components/trip/MapWidget";
 import TripSummary from "@/components/trip/TripSummary";
 import { TravelAssistant } from "@/components/trip/TravelAssistant";
+import { VisualTripSummary } from "@/components/trip/VisualTripSummary";
 import { Trip, User, Day, Activity, Checklist, ChecklistItem } from "@prisma/client";
 
 type TripWithRelations = Trip & {
@@ -51,6 +52,9 @@ export function TripDashboard({ trip }: TripDashboardProps) {
         <>
             <TripHeader trip={trip} />
             <TripSummary trip={trip} />
+
+            {/* Visual Trip Summary */}
+            <VisualTripSummary trip={trip} />
 
             <div className="flex flex-col lg:flex-row gap-8 items-start">
                 <TripSidebar
