@@ -22,8 +22,8 @@ export function VisualTripSummary({ trip }: VisualTripSummaryProps) {
         (sum, day) => sum + day.activities.reduce((daySum, activity) => daySum + (activity.travelDistance || 0), 0) + (day.startingTravelDistance || 0),
         0
     );
-    const totalDuration = trip.days.reduce(
-        (sum, day) => sum + day.activities.reduce((daySum, activity) => daySum + activity.duration, 0),
+    const totalTravelTime = trip.days.reduce(
+        (sum, day) => sum + day.activities.reduce((daySum, activity) => daySum + (activity.travelTime || 0), 0) + (day.startingTravelTime || 0),
         0
     );
 
@@ -137,25 +137,25 @@ export function VisualTripSummary({ trip }: VisualTripSummaryProps) {
                     </div>
                 </div>
 
-                {/* Total Time */}
+                {/* Travel Time */}
                 <div className="bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 rounded-2xl p-6 border-2 border-orange-200 dark:border-orange-800 relative overflow-hidden">
                     <div className="absolute top-0 right-0 opacity-10 text-8xl">⏱️</div>
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-2">
                             <Clock className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                            <span className="text-sm font-medium text-orange-700 dark:text-orange-300">Total Time</span>
+                            <span className="text-sm font-medium text-orange-700 dark:text-orange-300">Travel Time</span>
                         </div>
                         <div className="text-3xl font-bold text-orange-900 dark:text-orange-100 mb-2">
-                            {Math.floor(totalDuration / 60)}h {totalDuration % 60}m
+                            {Math.floor(totalTravelTime / 60)}h {totalTravelTime % 60}m
                         </div>
                         <div className="w-full bg-orange-200 dark:bg-orange-800 rounded-full h-2">
                             <div
                                 className="bg-orange-600 dark:bg-orange-400 h-2 rounded-full transition-all"
-                                style={{ width: `${Math.min((totalDuration / 480) * 100, 100)}%` }}
+                                style={{ width: `${Math.min((totalTravelTime / 480) * 100, 100)}%` }}
                             />
                         </div>
                         <p className="text-xs text-orange-600 dark:text-orange-400 mt-2">
-                            {Math.floor(totalDuration / trip.days.length / 60)}h per day
+                            {Math.floor(totalTravelTime / trip.days.length / 60)}h per day
                         </p>
                     </div>
                 </div>
@@ -272,7 +272,7 @@ export function VisualTripSummary({ trip }: VisualTripSummaryProps) {
             {/* Fun Facts */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-indigo-200 dark:border-indigo-800">
-                    <div className="text-3xl mb-2">🏆</div>
+                    <div className="text-3xl mb-2">🔥</div>
                     <div className="text-sm text-indigo-700 dark:text-indigo-300 mb-1">Busiest Day</div>
                     <div className="text-lg font-bold text-indigo-900 dark:text-indigo-100">
                         Day {busiestDay?.dayNumber || 1}
