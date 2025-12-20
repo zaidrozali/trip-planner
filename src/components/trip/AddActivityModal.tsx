@@ -6,6 +6,7 @@ import { createActivity } from "@/actions/activities";
 import { Button } from "@/components/ui/button";
 import { X, Loader2, MapPin, Clock, DollarSign, FileText, Timer, Car } from "lucide-react";
 import { PlacesAutocomplete } from "@/components/map/PlacesAutocomplete";
+import { toast } from "sonner";
 
 interface AddActivityModalProps {
     dayId: string;
@@ -60,9 +61,11 @@ export function AddActivityModal({ dayId, isOpen, onClose }: AddActivityModalPro
 
         if (result.error) {
             setError(result.error);
+            toast.error("Failed to add activity");
             setLoading(false);
         } else {
             setLoading(false);
+            toast.success("Activity added");
             router.refresh();
             onClose();
         }
@@ -196,52 +199,23 @@ export function AddActivityModal({ dayId, isOpen, onClose }: AddActivityModalPro
                         <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-3 flex items-center gap-2">
                             <Car className="w-4 h-4" /> Travel to Next Activity
                         </h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Transport Type
-                                </label>
-                                <select
-                                    name="transportType"
-                                    className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-gray-900 dark:text-white"
-                                >
-                                    {transportOptions.map((opt) => (
-                                        <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Travel Time
-                                </label>
-                                <div className="flex gap-2">
-                                    <div className="flex-1">
-                                        <input
-                                            type="number"
-                                            name="travelTimeHours"
-                                            min="0"
-                                            max="23"
-                                            placeholder="0"
-                                            className="w-full px-3 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-400 text-center"
-                                        />
-                                        <span className="text-xs text-gray-500 dark:text-gray-400 block text-center mt-1">hours</span>
-                                    </div>
-                                    <div className="flex-1">
-                                        <input
-                                            type="number"
-                                            name="travelTimeMins"
-                                            min="0"
-                                            max="59"
-                                            step="5"
-                                            placeholder="15"
-                                            className="w-full px-3 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-gray-900 dark:text-white placeholder:text-gray-400 text-center"
-                                        />
-                                        <span className="text-xs text-gray-500 dark:text-gray-400 block text-center mt-1">mins</span>
-                                    </div>
-                                </div>
-                            </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Transport Type
+                            </label>
+                            <select
+                                name="transportType"
+                                className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-teal-500 focus:border-transparent outline-none text-gray-900 dark:text-white"
+                            >
+                                {transportOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                Travel time and distance will be calculated automatically by Google Maps
+                            </p>
                         </div>
                     </div>
 

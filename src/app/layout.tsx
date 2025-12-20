@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { GoogleMapsProvider } from "@/components/map/GoogleMapsProvider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,8 +39,17 @@ export default function RootLayout({
           <GoogleMapsProvider>
             {children}
           </GoogleMapsProvider>
+          <Toaster
+            position="top-center"
+            richColors
+            closeButton
+            toastOptions={{
+              duration: 3000,
+            }}
+          />
         </ThemeProvider>
       </body>
     </html>
   );
 }
+

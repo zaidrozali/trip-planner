@@ -33,7 +33,8 @@ async function updateActivityDistance(activityId: string) {
         const result = await calculateDistance(
             { latitude: activity.latitude, longitude: activity.longitude },
             { latitude: nextActivity.latitude, longitude: nextActivity.longitude },
-            travelMode
+            travelMode,
+            false // Don't include alternatives for automatic calculations
         );
 
         if (result) {
@@ -64,11 +65,6 @@ export async function createActivity(dayId: string, formData: FormData) {
     const color = formData.get("color") as string || "orange";
     const transportType = formData.get("transportType") as string || null;
 
-    // Handle travel time as hours + minutes
-    const travelTimeHours = parseInt(formData.get("travelTimeHours") as string) || 0;
-    const travelTimeMins = parseInt(formData.get("travelTimeMins") as string) || 0;
-    const travelTime = (travelTimeHours * 60 + travelTimeMins) || null;
-
     // Get coordinates from form data (if provided by autocomplete)
     let latitude: number | null = null;
     let longitude: number | null = null;
@@ -89,7 +85,7 @@ export async function createActivity(dayId: string, formData: FormData) {
         }
     }
 
-    // Get max order
+    // Get max order and day info
     const lastActivity = await db.activity.findFirst({
         where: { dayId },
         orderBy: { order: "desc" },
@@ -109,13 +105,43 @@ export async function createActivity(dayId: string, formData: FormData) {
             icon,
             color,
             transportType: transportType || null,
-            travelTime,
             order: (lastActivity?.order ?? -1) + 1,
         },
     });
 
-    // Calculate distance from previous activity to this new one
-    if (lastActivity && lastActivity.id) {
+    // If this is the first activity, calculate distance from starting location
+    if (!lastActivity && latitude && longitude) {
+        const day = await db.day.findUnique({
+            where: { id: dayId },
+            select: {
+                id: true,
+                startingLatitude: true,
+                startingLongitude: true,
+                startingTransport: true,
+            },
+        });
+
+        if (day?.startingLatitude && day?.startingLongitude) {
+            const travelMode = mapTransportTypeToTravelMode(day.startingTransport);
+            const result = await calculateDistance(
+                { latitude: day.startingLatitude, longitude: day.startingLongitude },
+                { latitude, longitude },
+                travelMode,
+                false // Don't include alternatives for automatic calculations
+            );
+
+            if (result) {
+                await db.day.update({
+                    where: { id: dayId },
+                    data: {
+                        startingTravelDistance: result.distanceKm,
+                        startingTravelTime: result.durationMinutes,
+                    },
+                });
+            }
+        }
+    } else if (lastActivity && lastActivity.id) {
+        // Calculate distance from previous activity to this new one
         await updateActivityDistance(lastActivity.id);
     }
 
@@ -136,14 +162,6 @@ export async function updateActivity(id: string, formData: FormData) {
     const icon = formData.get("icon") as string || "MapPin";
     const color = formData.get("color") as string || "orange";
     const transportType = formData.get("transportType") as string || null;
-
-    // Handle travel time (can be hours/minutes or direct minutes)
-    const travelTimeHours = parseInt(formData.get("travelTimeHours") as string) || 0;
-    const travelTimeMins = parseInt(formData.get("travelTimeMins") as string) || 0;
-    const travelTimeStr = formData.get("travelTime") as string;
-    const travelTime = travelTimeHours || travelTimeMins
-        ? (travelTimeHours * 60 + travelTimeMins) || null
-        : travelTimeStr ? parseInt(travelTimeStr) : null;
 
     // Get coordinates from form data or check if location changed
     let latitude: number | null | undefined = undefined;
@@ -197,7 +215,6 @@ export async function updateActivity(id: string, formData: FormData) {
             icon,
             color,
             transportType: transportType || null,
-            travelTime,
         },
         include: {
             day: {
@@ -233,6 +250,185 @@ export async function deleteActivity(id: string) {
     if (!user) return { error: "Not authenticated" };
 
     await db.activity.delete({ where: { id } });
+
+    revalidatePath("/");
+    return { success: true };
+}
+
+/**
+ * Recalculate distances for all activities in a day
+ * This is useful when activities have coordinates but missing distance/duration data
+ */
+export async function recalculateDistancesForDay(dayId: string) {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
+
+    const day = await db.day.findUnique({
+        where: { id: dayId },
+        include: {
+            activities: {
+                orderBy: { order: "asc" },
+            },
+        },
+    });
+
+    if (!day) return { error: "Day not found" };
+
+    let calculatedCount = 0;
+    let errorCount = 0;
+
+    // Calculate distance from starting location to first activity
+    if (day.startingLatitude && day.startingLongitude && day.activities.length > 0) {
+        const firstActivity = day.activities[0];
+        if (firstActivity.latitude && firstActivity.longitude) {
+            const travelMode = mapTransportTypeToTravelMode(day.startingTransport);
+            try {
+                const result = await calculateDistance(
+                    { latitude: day.startingLatitude, longitude: day.startingLongitude },
+                    { latitude: firstActivity.latitude, longitude: firstActivity.longitude },
+                    travelMode,
+                    false // Don't include alternatives for automatic calculations
+                );
+
+                if (result) {
+                    await db.day.update({
+                        where: { id: dayId },
+                        data: {
+                            startingTravelDistance: result.distanceKm,
+                            startingTravelTime: result.durationMinutes,
+                        },
+                    });
+                    calculatedCount++;
+                }
+            } catch (error) {
+                console.error("Error calculating starting location distance:", error);
+                errorCount++;
+            }
+        }
+    }
+
+    // Calculate distances between consecutive activities
+    for (let i = 0; i < day.activities.length - 1; i++) {
+        const activity = day.activities[i];
+        const nextActivity = day.activities[i + 1];
+
+        // Skip if either activity doesn't have coordinates
+        if (!activity.latitude || !activity.longitude ||
+            !nextActivity.latitude || !nextActivity.longitude) {
+            continue;
+        }
+
+        // Use transport type or default to driving
+        const travelMode = mapTransportTypeToTravelMode(activity.transportType || "driving");
+
+        try {
+            const result = await calculateDistance(
+                { latitude: activity.latitude, longitude: activity.longitude },
+                { latitude: nextActivity.latitude, longitude: nextActivity.longitude },
+                travelMode,
+                false // Don't include alternatives for automatic calculations
+            );
+
+            if (result) {
+                await db.activity.update({
+                    where: { id: activity.id },
+                    data: {
+                        travelDistance: result.distanceKm,
+                        travelTime: result.durationMinutes,
+                    },
+                });
+                calculatedCount++;
+            }
+        } catch (error) {
+            console.error(`Error calculating distance for activity ${activity.id}:`, error);
+            errorCount++;
+        }
+    }
+
+    revalidatePath("/");
+    return {
+        success: true,
+        calculatedCount,
+        errorCount,
+        message: `Calculated ${calculatedCount} distances${errorCount > 0 ? ` (${errorCount} errors)` : ''}`,
+        hasAlternatives: calculatedCount > 0, // Let UI know alternatives might be available
+    };
+}
+
+/**
+ * Get route alternatives between two activities
+ */
+export async function getRouteAlternatives(activityId: string) {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
+
+    const activity = await db.activity.findUnique({
+        where: { id: activityId },
+        include: {
+            day: {
+                include: {
+                    activities: {
+                        orderBy: { order: "asc" },
+                    },
+                },
+            },
+        },
+    });
+
+    if (!activity || !activity.latitude || !activity.longitude) {
+        return { error: "Activity not found or missing coordinates" };
+    }
+
+    // Find the next activity
+    const currentIndex = activity.day.activities.findIndex((a) => a.id === activityId);
+    const nextActivity = activity.day.activities[currentIndex + 1];
+
+    if (!nextActivity || !nextActivity.latitude || !nextActivity.longitude) {
+        return { error: "No next activity or missing coordinates" };
+    }
+
+    const travelMode = mapTransportTypeToTravelMode(activity.transportType || "driving");
+    const result = await calculateDistance(
+        { latitude: activity.latitude, longitude: activity.longitude },
+        { latitude: nextActivity.latitude, longitude: nextActivity.longitude },
+        travelMode,
+        true // Include alternatives
+    );
+
+    if (!result) {
+        return { error: "Failed to calculate routes" };
+    }
+
+    return {
+        success: true,
+        currentRoute: {
+            distanceKm: activity.travelDistance || result.distanceKm,
+            durationMinutes: activity.travelTime || result.durationMinutes,
+            distanceText: result.distanceText,
+            durationText: result.durationText,
+        },
+        alternatives: result.alternatives || [],
+    };
+}
+
+/**
+ * Select a specific route alternative for an activity
+ */
+export async function selectRouteAlternative(
+    activityId: string,
+    distanceKm: number,
+    durationMinutes: number
+) {
+    const user = await getUser();
+    if (!user) return { error: "Not authenticated" };
+
+    await db.activity.update({
+        where: { id: activityId },
+        data: {
+            travelDistance: distanceKm,
+            travelTime: durationMinutes,
+        },
+    });
 
     revalidatePath("/");
     return { success: true };

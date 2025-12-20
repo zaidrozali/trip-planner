@@ -3,11 +3,15 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Bed, Coffee, MapPin, Mountain, Plus, Utensils, Car, Camera, Clock, ArrowDown, Pencil, Wallet } from "lucide-react"
+import { Bed, Coffee, MapPin, Mountain, Plus, Utensils, Car, Camera, Clock, ArrowDown, Pencil, Wallet, RefreshCw, GitCompareArrows } from "lucide-react"
 import { Trip, Day, Activity } from "@prisma/client"
 import { AddActivityModal } from "./AddActivityModal";
 import { EditActivityModal } from "./EditActivityModal";
+import { StartingLocationCard } from "./StartingLocationCard";
+import { RouteAlternativesModal } from "./RouteAlternativesModal";
 import { formatDistance } from "@/lib/distance";
+import { recalculateDistancesForDay } from "@/actions/activities";
+import { toast } from "sonner";
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
     MapPin,
@@ -45,9 +49,19 @@ type ActivityWithExtras = Activity & {
     travelDistance?: number | null;
 };
 
+type DayWithStartingLocation = Day & {
+    startingLocation?: string | null;
+    startingLatitude?: number | null;
+    startingLongitude?: number | null;
+    startingTransport?: string | null;
+    startingTravelDistance?: number | null;
+    startingTravelTime?: number | null;
+    activities: Activity[];
+};
+
 interface ActivityFeedProps {
     trip: Trip & {
-        days: (Day & { activities: Activity[] })[]
+        days: DayWithStartingLocation[]
     }
     selectedDay: number
 }
@@ -55,9 +69,42 @@ interface ActivityFeedProps {
 export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingActivity, setEditingActivity] = useState<ActivityWithExtras | null>(null);
+    const [isRecalculating, setIsRecalculating] = useState(false);
+    const [routeAlternativesActivityId, setRouteAlternativesActivityId] = useState<string | null>(null);
 
     const day = trip.days.find(d => d.dayNumber === selectedDay);
     const activities = (day?.activities ?? []) as ActivityWithExtras[];
+
+    const routeAlternativesActivity = routeAlternativesActivityId
+        ? activities.find(a => a.id === routeAlternativesActivityId)
+        : null;
+    const routeAlternativesNextActivity = routeAlternativesActivity
+        ? activities[activities.findIndex(a => a.id === routeAlternativesActivityId) + 1]
+        : null;
+
+    const handleRecalculateDistances = async () => {
+        if (!day?.id) return;
+
+        setIsRecalculating(true);
+        toast.loading("Calculating distances...");
+
+        try {
+            const result = await recalculateDistancesForDay(day.id);
+            toast.dismiss();
+
+            if (result.error) {
+                toast.error(result.error);
+            } else {
+                toast.success(result.message || "Distances calculated successfully");
+            }
+        } catch (error) {
+            toast.dismiss();
+            toast.error("Failed to calculate distances");
+            console.error("Error recalculating distances:", error);
+        } finally {
+            setIsRecalculating(false);
+        }
+    };
 
     // Calculate totals for the day
     const totalCost = activities.reduce((sum, a) => sum + a.cost, 0);
@@ -118,13 +165,27 @@ export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
                         {activities.length} Activities
                     </p>
                 </div>
-                <Button
-                    size="sm"
-                    onClick={() => setIsAddModalOpen(true)}
-                    className="bg-teal-600 hover:bg-teal-700 text-white shadow-md shadow-teal-200 dark:shadow-teal-900/20 rounded-full border-0"
-                >
-                    <Plus className="w-4 h-4 mr-1" /> Add Activity
-                </Button>
+                <div className="flex gap-2">
+                    {activities.length > 0 && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleRecalculateDistances}
+                            disabled={isRecalculating}
+                            className="rounded-full"
+                        >
+                            <RefreshCw className={`w-4 h-4 mr-1 ${isRecalculating ? 'animate-spin' : ''}`} />
+                            Calculate Distances
+                        </Button>
+                    )}
+                    <Button
+                        size="sm"
+                        onClick={() => setIsAddModalOpen(true)}
+                        className="bg-teal-600 hover:bg-teal-700 text-white shadow-md shadow-teal-200 dark:shadow-teal-900/20 rounded-full border-0"
+                    >
+                        <Plus className="w-4 h-4 mr-1" /> Add Activity
+                    </Button>
+                </div>
             </div>
 
             {/* Day Summary Stats */}
@@ -158,6 +219,14 @@ export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
                         </p>
                     </div>
                 </div>
+            )}
+
+            {/* Starting Location */}
+            {day && (
+                <StartingLocationCard
+                    day={day}
+                    hasActivities={activities.length > 0}
+                />
             )}
 
             <div className="space-y-2">
@@ -234,7 +303,7 @@ export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
 
                                 {/* Transport connector (if not last activity and has transport info) */}
                                 {!isLastActivity && transportType && (
-                                    <div className="flex items-center justify-center py-2">
+                                    <div className="flex items-center justify-center py-2 gap-2">
                                         <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 rounded-full px-4 py-2 text-sm">
                                             <ArrowDown className="w-4 h-4 text-gray-400" />
                                             <span className="text-lg">{transportIcons[transportType] || "🚗"}</span>
@@ -266,6 +335,15 @@ export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
                                                 </>
                                             )}
                                         </div>
+                                        {transportType === 'driving' && (travelDistance || travelTime) && (
+                                            <button
+                                                onClick={() => setRouteAlternativesActivityId(activity.id)}
+                                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors"
+                                                title="View alternative routes"
+                                            >
+                                                <GitCompareArrows className="w-4 h-4 text-gray-500 hover:text-teal-600" />
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -289,6 +367,17 @@ export default function ActivityFeed({ trip, selectedDay }: ActivityFeedProps) {
                     activity={editingActivity}
                     isOpen={true}
                     onClose={() => setEditingActivity(null)}
+                />
+            )}
+
+            {/* Route Alternatives Modal */}
+            {routeAlternativesActivity && routeAlternativesNextActivity && (
+                <RouteAlternativesModal
+                    activityId={routeAlternativesActivity.id}
+                    activityTitle={routeAlternativesActivity.title}
+                    nextActivityTitle={routeAlternativesNextActivity.title}
+                    isOpen={!!routeAlternativesActivityId}
+                    onClose={() => setRouteAlternativesActivityId(null)}
                 />
             )}
         </div>

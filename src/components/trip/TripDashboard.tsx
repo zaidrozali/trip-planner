@@ -5,6 +5,8 @@ import TripHeader from "@/components/trip/TripHeader";
 import TripSidebar from "@/components/trip/TripSidebar";
 import ActivityFeed from "@/components/trip/ActivityFeed";
 import MapWidget from "@/components/trip/MapWidget";
+import TripSummary from "@/components/trip/TripSummary";
+import { TravelAssistant } from "@/components/trip/TravelAssistant";
 import { Trip, User, Day, Activity, Checklist, ChecklistItem } from "@prisma/client";
 
 type TripWithRelations = Trip & {
@@ -32,9 +34,23 @@ export function TripDashboard({ trip }: TripDashboardProps) {
         return null;
     }, [trip.latitude, trip.longitude]);
 
+    // Get starting location for the selected day
+    const startingLocation = useMemo(() => {
+        if (selectedDayData?.startingLatitude && selectedDayData?.startingLongitude) {
+            return {
+                latitude: selectedDayData.startingLatitude,
+                longitude: selectedDayData.startingLongitude,
+                location: selectedDayData.startingLocation ?? "Starting Point",
+                transportType: selectedDayData.startingTransport,
+            };
+        }
+        return null;
+    }, [selectedDayData]);
+
     return (
         <>
             <TripHeader trip={trip} />
+            <TripSummary trip={trip} />
 
             <div className="flex flex-col lg:flex-row gap-8 items-start">
                 <TripSidebar
@@ -49,8 +65,14 @@ export function TripDashboard({ trip }: TripDashboardProps) {
                 <MapWidget
                     activities={dayActivities}
                     tripLocation={tripLocation}
+                    startingLocation={startingLocation}
                 />
             </div>
+
+            {/* AI Travel Assistant */}
+            <TravelAssistant trip={trip} currentDay={selectedDay} totalDays={trip.days.length} />
         </>
     );
 }
+
+

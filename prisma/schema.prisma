@@ -54,12 +54,18 @@ model TripCollaborator {
 }
 
 model Day {
-  id         String     @id @default(cuid())
-  tripId     String
-  dayNumber  Int
-  date       DateTime
-  trip       Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
-  activities Activity[]
+  id                    String     @id @default(cuid())
+  tripId                String
+  dayNumber             Int
+  date                  DateTime
+  startingLocation      String?    // e.g., "Hotel Grand Hyatt"
+  startingLatitude      Float?
+  startingLongitude     Float?
+  startingTransport     String?    // transport type to first activity
+  startingTravelDistance Float?    // distance to first activity in km
+  startingTravelTime    Int?       // travel time to first activity in minutes
+  trip                  Trip       @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  activities            Activity[]
 
   @@unique([tripId, dayNumber])
 }

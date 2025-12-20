@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button"
-import { Calendar, Download, MapPin, Share2, Users, Wallet, Trash2 } from "lucide-react"
+import { Calendar, Download, MapPin, Share2, Users, Wallet, Trash2, Pencil } from "lucide-react"
 import { Trip, User, Day, Activity } from "@prisma/client"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EditTripModal } from "./EditTripModal";
 import { deleteTrip } from "@/actions/trips";
 
 type ActivityWithCost = Activity & { cost: number };
@@ -20,6 +21,7 @@ interface TripHeaderProps {
 export default function TripHeader({ trip }: TripHeaderProps) {
     const router = useRouter();
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
 
     const startDate = new Date(trip.startDate);
@@ -63,14 +65,20 @@ export default function TripHeader({ trip }: TripHeaderProps) {
         <div className="space-y-6 pb-6 border-b border-gray-100 dark:border-gray-800 transition-colors">
             {/* Top Row: Title & Actions */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-start gap-4">
+                <div
+                    className="flex items-start gap-4 group cursor-pointer"
+                    onClick={() => setShowEditModal(true)}
+                >
                     <div className="h-16 w-16 bg-gradient-to-br from-teal-500 to-cyan-500 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-teal-200 dark:shadow-teal-900/20">
                         {trip.coverEmoji}
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">
-                            {trip.title}
-                        </h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                                {trip.title}
+                            </h1>
+                            <Pencil className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 text-sm mt-1">
                             <MapPin className="w-4 h-4" />
                             <span>{trip.location || "No location set"}</span>
@@ -133,10 +141,10 @@ export default function TripHeader({ trip }: TripHeaderProps) {
                     <div className="h-2 w-full bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
                         <div
                             className={`h-full rounded-full transition-all duration-500 ${isOverBudget
-                                    ? "bg-red-500"
-                                    : budgetPercent > 80
-                                        ? "bg-amber-500"
-                                        : "bg-teal-500"
+                                ? "bg-red-500"
+                                : budgetPercent > 80
+                                    ? "bg-amber-500"
+                                    : "bg-teal-500"
                                 }`}
                             style={{ width: `${Math.min(budgetPercent, 100)}%` }}
                         />
@@ -161,6 +169,14 @@ export default function TripHeader({ trip }: TripHeaderProps) {
                 isLoading={isDeleting}
                 variant="danger"
             />
+
+            {/* Edit Trip Modal */}
+            <EditTripModal
+                trip={trip}
+                isOpen={showEditModal}
+                onClose={() => setShowEditModal(false)}
+            />
         </div>
     )
 }
+
